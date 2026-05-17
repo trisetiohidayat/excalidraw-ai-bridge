@@ -1,0 +1,252 @@
+:root {
+  color: #1f2933;
+  background: #111827;
+  font-family:
+    ui-sans-serif,
+    "Avenir Next",
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.bridge-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(16, 24, 40, 0.08), rgba(16, 185, 129, 0.08)),
+    #f5f4ec;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.stage .excalidraw {
+  --color-primary: #2563eb;
+  --color-primary-darker: #1d4ed8;
+  --color-primary-darkest: #1e40af;
+  --color-primary-light: #dbeafe;
+  font-family:
+    ui-sans-serif,
+    "Avenir Next",
+    "Segoe UI",
+    sans-serif;
+}
+
+.hud,
+.hud-button {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 10;
+}
+
+.hud-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  height: 42px;
+  padding: 0 14px;
+  color: #111827;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(31, 41, 55, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.14);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.hud-button__read {
+  max-width: 82px;
+  overflow: hidden;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-button__read--unread {
+  color: #b45309;
+}
+
+.hud-button:hover {
+  transform: translateY(-1px);
+}
+
+.hud {
+  width: min(320px, calc(100vw - 36px));
+  padding: 14px;
+  color: #111827;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(31, 41, 55, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(10px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 160ms ease;
+}
+
+.hud--closed {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.98);
+}
+
+.hud--open {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.hud__header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.12);
+}
+
+.hud__header > div {
+  flex: 1;
+}
+
+.hud__minimize {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #475467;
+  background: #f2f4f7;
+  border: 1px solid rgba(31, 41, 55, 0.1);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.hud__minimize:hover {
+  color: #111827;
+  background: #e5e7eb;
+}
+
+.hud__sync {
+  width: 100%;
+  height: 34px;
+  margin-top: 12px;
+  color: #ffffff;
+  font-weight: 700;
+  background: #2563eb;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.hud__sync:hover {
+  background: #1d4ed8;
+}
+
+.hud__header strong,
+.hud__header span {
+  display: block;
+}
+
+.hud__header strong {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.hud__header span {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 99px;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.18);
+}
+
+.dot--live {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.16);
+}
+
+.dot--polling {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+}
+
+.dot--offline {
+  background: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.16);
+}
+
+dl {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+dt {
+  color: #667085;
+}
+
+dd {
+  max-width: 170px;
+  margin: 0;
+  overflow: hidden;
+  color: #111827;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error {
+  margin: 12px 0 0;
+  padding: 8px;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}

@@ -1,0 +1,39 @@
+{
+  "name": "excalidraw-ai-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,app -c cyan,green \"tsx src/server/index.ts\" \"vite --host 127.0.0.1\"",
+    "dev:server": "tsx src/server/index.ts",
+    "dev:app": "vite --host 127.0.0.1",
+    "build": "tsc && vite build && tsc -p tsconfig.server.json",
+    "start": "node dist-server/index.js",
+    "mcp": "node dist-server/mcp.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@vitejs/plugin-react": "5.1.1",
+    "express": "5.2.1",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "vite": "6.4.2",
+    "ws": "8.20.1",
+    "zod": "4.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "25.0.0",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@types/ws": "8.18.1",
+    "concurrently": "9.2.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "lodash-es": "4.18.1"
+  }
+}
