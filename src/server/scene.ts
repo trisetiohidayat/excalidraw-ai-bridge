@@ -324,7 +324,10 @@ export class SceneStore {
           appState: command.appState ?? this.scene.appState,
           files: command.files ?? this.scene.files,
         });
-        changed = !sameJson(this.scene.elements, nextScene.elements) || !sameJson(this.scene.files, nextScene.files);
+        changed =
+          !sameJson(this.scene.elements, nextScene.elements)
+          || !sameJson(this.scene.appState, nextScene.appState)
+          || !sameJson(this.scene.files, nextScene.files);
         activities = this.describeSceneDiff(previousScene, nextScene, actor);
         this.scene = nextScene;
       }
@@ -587,8 +590,14 @@ export function normalizeScene(value: unknown): BridgeScene {
     type: "excalidraw",
     version: 2,
     source: "excalidraw-ai-bridge",
-    elements: Array.isArray(scene.elements) ? scene.elements as SceneElement[] : [],
+    elements: Array.isArray(scene.elements) ? scene.elements.map(normalizeElement) : [],
     appState,
     files: scene.files && typeof scene.files === "object" ? scene.files : {},
   };
+}
+
+function normalizeElement(element: unknown): SceneElement {
+  const normalized = { ...(element as SceneElement) };
+  delete normalized.index;
+  return normalized;
 }

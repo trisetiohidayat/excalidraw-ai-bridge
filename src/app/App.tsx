@@ -11,300 +11,329 @@ type BridgeScene = {
   files: Record<string, unknown>;
 };
 
-type BridgeEvent = {
-  id: string;
-  command: { type: string };
-  scene: BridgeScene;
-  timestamp: string;
-  sceneVersion: number;
-  browserAppliedVersion: number;
-  aiSeenVersion: number;
-};
-
-type ActivityEvent = {
-  id: string;
-  seq: number;
-  actor: "user" | "ai" | "system";
-  type: string;
-  summary: string;
-  sceneVersion: number;
-  elementIds: string[];
-  payload: Record<string, unknown>;
-  createdAt: string;
-};
-
 type BridgeStatus = {
   ok: true;
-  clients: number;
   elements: number;
   scenePath: string;
   sceneVersion: number;
-  browserAppliedVersion: number;
-  aiSeenVersion: number;
-  latestSeq: number;
-  latestAiSeq: number;
-  lastAiReadUserSeq: number;
   unreadUserChanges: number;
   pendingAiApply: number;
-  unreadChanges: number;
-  pendingBrowserApply: number;
   pendingOps: number;
-  activitySeq: number;
-  aiSeenActivitySeq: number;
-  unreadActivities: number;
-  lastActivity: ActivityEvent | null;
-  lastUserActivity: ActivityEvent | null;
-  lastAiActivity: ActivityEvent | null;
+  lastActivity: { actor: string; summary: string; createdAt: string } | null;
+  lastAiActivity: { summary: string; createdAt: string } | null;
   lastCommand: string;
   lastMutationAt: string | null;
-  lastBrowserAppliedAt: string | null;
-  lastAiAppliedAt: string | null;
-  lastAiSeenAt: string | null;
-};
-
-type BridgeStatusMessage = {
-  id: "status";
-  type: "status";
-  status: BridgeStatus;
-  timestamp: string;
 };
 
 const HTTP_URL = "http://127.0.0.1:5174";
-const WS_URL = "ws://127.0.0.1:5174/ws";
+const DEFAULT_SCENE_PATH = "/Users/tri-mac/myproject/excalidraw-ai-bridge/data/current.excalidraw";
 
 function sanitizeAppState(appState: any): Record<string, unknown> {
   if (!appState || typeof appState !== "object") return {};
-  const { collaborators: _collaborators, ...safeAppState } = appState;
-  return safeAppState;
+  const {
+    activeTool: _activeTool,
+    collaborators: _collaborators,
+    contextMenu: _contextMenu,
+    cursorButton: _cursorButton,
+    editingFrame: _editingFrame,
+    editingGroupId: _editingGroupId,
+    editingLinearElement: _editingLinearElement,
+    editingTextElement: _editingTextElement,
+    elementsToHighlight: _elementsToHighlight,
+    errorMessage: _errorMessage,
+    frameToHighlight: _frameToHighlight,
+    height: _height,
+    hoveredElementIds: _hoveredElementIds,
+    isCropping: _isCropping,
+    isLoading: _isLoading,
+    isResizing: _isResizing,
+    isRotating: _isRotating,
+    multiElement: _multiElement,
+    newElement: _newElement,
+    offsetLeft: _offsetLeft,
+    offsetTop: _offsetTop,
+    openDialog: _openDialog,
+    openMenu: _openMenu,
+    openPopup: _openPopup,
+    openSidebar: _openSidebar,
+    pasteDialog: _pasteDialog,
+    pendingImageElementId: _pendingImageElementId,
+    previousSelectedElementIds: _previousSelectedElementIds,
+    resizingElement: _resizingElement,
+    selectedElementIds: _selectedElementIds,
+    selectedElementsAreBeingDragged: _selectedElementsAreBeingDragged,
+    selectedGroupIds: _selectedGroupIds,
+    selectedLinearElement: _selectedLinearElement,
+    selectionElement: _selectionElement,
+    shouldCacheIgnoreZoom: _shouldCacheIgnoreZoom,
+    showHyperlinkPopup: _showHyperlinkPopup,
+    snapLines: _snapLines,
+    startBoundElement: _startBoundElement,
+    suggestedBindings: _suggestedBindings,
+    toast: _toast,
+    userToFollow: _userToFollow,
+    width: _width,
+    ...safeAppState
+  } = appState;
+  return {
+    ...safeAppState,
+    viewModeEnabled: false,
+    activeTool: { type: "selection", customType: null, locked: false, lastActiveTool: null },
+    selectedElementIds: {},
+    selectedGroupIds: {},
+    editingTextElement: null,
+    editingLinearElement: null,
+    openDialog: null,
+    openMenu: null,
+    openPopup: null,
+    openSidebar: null,
+    showWelcomeScreen: false,
+  };
 }
 
 function safeFiles(files: any): Record<string, unknown> {
   return files && typeof files === "object" ? files : {};
 }
 
+function autosaveFingerprint(elements: readonly any[], files: any): string {
+  return JSON.stringify({
+    elements: elements.map((element: any) => ({
+      id: element.id,
+      type: element.type,
+      version: element.version,
+      versionNonce: element.versionNonce,
+      isDeleted: element.isDeleted,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+      angle: element.angle,
+      text: element.text,
+      points: element.points,
+      startBinding: element.startBinding,
+      endBinding: element.endBinding,
+      containerId: element.containerId,
+      backgroundColor: element.backgroundColor,
+      strokeColor: element.strokeColor,
+      strokeWidth: element.strokeWidth,
+      strokeStyle: element.strokeStyle,
+      fillStyle: element.fillStyle,
+      opacity: element.opacity,
+    })),
+    files: safeFiles(files),
+  });
+}
+
 export default function App() {
   const excalidrawApiRef = useRef<any>(null);
-  const pendingSceneRef = useRef<{ scene: BridgeScene; sceneVersion?: number } | null>(null);
-  const syncTimerRef = useRef<number | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
+  const pendingSceneRef = useRef<BridgeScene | null>(null);
+  const loadedInitialSceneRef = useRef(false);
+  const pointerDownRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const saveAgainRef = useRef(false);
   const serverVersionRef = useRef(0);
-  const applyingRemoteSceneRef = useRef(false);
-  const hasLoadedInitialSceneRef = useRef(false);
-  const connectedRef = useRef(false);
-  const [connected, setConnected] = useState(false);
-  const [serverUp, setServerUp] = useState(false);
-  const [lastEvent, setLastEvent] = useState<BridgeEvent | null>(null);
-  const [elementCount, setElementCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [hudOpen, setHudOpen] = useState(false);
-  const [lastSync, setLastSync] = useState<string>("never");
+  const lastSavedFingerprintRef = useRef("");
+  const saveTimerRef = useRef<number | null>(null);
+  const [autosaveState, setAutosaveState] = useState<"saved" | "saving" | "error" | "offline">("saved");
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [pathExpanded, setPathExpanded] = useState(false);
 
-  const acknowledgeBrowserApplied = useCallback((sceneVersion: number) => {
-    if (!Number.isFinite(sceneVersion) || sceneVersion <= 0) return;
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "browser_applied", sceneVersion }));
-      return;
-    }
-    fetch(`${HTTP_URL}/api/browser/applied`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sceneVersion }),
-    }).catch(() => undefined);
+  const markTitle = useCallback((label: string) => {
+    document.title = `${label} - Excalidraw AI Bridge`;
+    setAutosaveState(label === "Saved" ? "saved" : label === "Saving" ? "saving" : label === "Offline" ? "offline" : "error");
   }, []);
 
-  const applyScene = useCallback((scene: BridgeScene, sceneVersion?: number): boolean => {
+  const applyScene = useCallback((scene: BridgeScene) => {
     const api = excalidrawApiRef.current;
     if (!api) {
-      pendingSceneRef.current = { scene, sceneVersion };
-      return false;
-    }
-    applyingRemoteSceneRef.current = true;
-    try {
-      api.updateScene({
-        elements: scene.elements,
-        appState: sanitizeAppState(scene.appState),
-        files: safeFiles(scene.files),
-      });
-      setElementCount(scene.elements.length);
-      hasLoadedInitialSceneRef.current = true;
-      if (typeof sceneVersion === "number") {
-        serverVersionRef.current = sceneVersion;
-        acknowledgeBrowserApplied(sceneVersion);
-      }
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      return false;
-    } finally {
-      window.setTimeout(() => {
-        applyingRemoteSceneRef.current = false;
-      }, 800);
-    }
-  }, [acknowledgeBrowserApplied]);
-
-  const postSceneSync = useCallback((elements: readonly any[], appState: any, files: any, options: { force?: boolean } = {}) => {
-    let body: string;
-    try {
-      body = JSON.stringify({
-        elements,
-        appState: sanitizeAppState(appState),
-        files: safeFiles(files),
-        baseVersion: serverVersionRef.current,
-        force: Boolean(options.force),
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      pendingSceneRef.current = scene;
       return;
     }
+    api.updateScene({
+      elements: scene.elements,
+      appState: sanitizeAppState(scene.appState),
+      files: safeFiles(scene.files),
+    });
+    loadedInitialSceneRef.current = true;
+    lastSavedFingerprintRef.current = autosaveFingerprint(scene.elements, scene.files);
+    markTitle("Saved");
+  }, [markTitle]);
+
+  const readCurrentScene = useCallback(() => {
+    const api = excalidrawApiRef.current;
+    if (!api || !loadedInitialSceneRef.current) return null;
+    const elements = typeof api.getSceneElements === "function" ? api.getSceneElements() : [];
+    const appState = typeof api.getAppState === "function" ? api.getAppState() : {};
+    const files = typeof api.getFiles === "function" ? api.getFiles() : {};
+    return { elements, appState, files };
+  }, []);
+
+  const saveCurrentScene = useCallback((force = false) => {
+    const draft = readCurrentScene();
+    if (!draft) return;
+    const fingerprint = autosaveFingerprint(draft.elements, draft.files);
+    if (!force && fingerprint === lastSavedFingerprintRef.current) {
+      markTitle("Saved");
+      return;
+    }
+    if (saveInFlightRef.current) {
+      saveAgainRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
+    saveAgainRef.current = false;
+    markTitle("Saving");
 
     fetch(`${HTTP_URL}/api/scene/sync`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body,
+      body: JSON.stringify({
+        elements: draft.elements,
+        appState: sanitizeAppState(draft.appState),
+        files: safeFiles(draft.files),
+        baseVersion: serverVersionRef.current,
+        force,
+      }),
     })
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        return res.json() as Promise<Partial<BridgeStatus>>;
+        return res.json();
       })
       .then((status) => {
         if (typeof status.sceneVersion === "number") {
           serverVersionRef.current = status.sceneVersion;
-          setBridgeStatus((current) => current ? { ...current, ...status } as BridgeStatus : current);
+          setBridgeStatus((current) => current ? { ...current, ...status } : current);
         }
-        setLastSync(new Date().toLocaleTimeString());
-        setError(null);
+        lastSavedFingerprintRef.current = fingerprint;
+        markTitle("Saved");
       })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : String(err));
+      .catch(() => {
+        markTitle("Save error");
+      })
+      .finally(() => {
+        saveInFlightRef.current = false;
+        if (saveAgainRef.current) {
+          window.setTimeout(() => saveCurrentScene(true), 250);
+        }
       });
-  }, []);
+  }, [markTitle, readCurrentScene]);
 
-  const syncBrowserScene = useCallback((elements: readonly any[], appState: any, files: any) => {
-    if (applyingRemoteSceneRef.current) return;
-    if (!hasLoadedInitialSceneRef.current && elements.length === 0) return;
-    setElementCount(elements.length);
-    if (syncTimerRef.current) {
-      window.clearTimeout(syncTimerRef.current);
+  const scheduleSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
     }
-    syncTimerRef.current = window.setTimeout(() => {
-      postSceneSync(elements, appState, files);
-    }, 500);
-  }, [postSceneSync]);
+    saveTimerRef.current = window.setTimeout(() => {
+      if (!pointerDownRef.current) {
+        saveCurrentScene();
+      }
+    }, 700);
+  }, [saveCurrentScene]);
 
-  const syncNow = useCallback(() => {
-    const api = excalidrawApiRef.current;
-    if (!api) return;
-    const elements = typeof api.getSceneElements === "function" ? api.getSceneElements() : [];
-    const appState = typeof api.getAppState === "function" ? api.getAppState() : {};
-    const files = typeof api.getFiles === "function" ? api.getFiles() : {};
-    setElementCount(elements.length);
-    postSceneSync(elements, appState, files, { force: true });
-  }, [postSceneSync]);
+  useEffect(() => {
+    fetch(`${HTTP_URL}/api/scene`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        return res.json() as Promise<BridgeScene>;
+      })
+      .then((scene) => {
+        applyScene(scene);
+      })
+      .catch(() => {
+        loadedInitialSceneRef.current = true;
+        markTitle("Offline");
+      });
+  }, [applyScene, markTitle]);
 
   useEffect(() => {
     let cancelled = false;
-
-    async function loadInitialScene() {
-      if (connectedRef.current && hasLoadedInitialSceneRef.current) return;
-      try {
-        const res = await fetch(`${HTTP_URL}/api/scene`);
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-          const scene = await res.json() as BridgeScene;
-          if (!cancelled) {
-            setServerUp(true);
-          applyScene(scene);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setServerUp(false);
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      }
-    }
-
-    loadInitialScene();
-    const interval = window.setInterval(loadInitialScene, 5000);
+    const loadStatus = () => {
+      fetch(`${HTTP_URL}/api/status`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          return res.json() as Promise<BridgeStatus>;
+        })
+        .then((status) => {
+          if (cancelled) return;
+          setBridgeStatus(status);
+          serverVersionRef.current = status.sceneVersion;
+        })
+        .catch(() => {
+          if (!cancelled) setAutosaveState("offline");
+        });
+    };
+    loadStatus();
+    const interval = window.setInterval(loadStatus, 3000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [applyScene]);
+  }, []);
 
   useEffect(() => {
-    let socket: WebSocket | null = null;
-    let reconnectTimer = 0;
-    let closed = false;
-
-    const connect = () => {
-      socket = new WebSocket(WS_URL);
-      socketRef.current = socket;
-      socket.addEventListener("open", () => {
-        connectedRef.current = true;
-        setConnected(true);
-        setServerUp(true);
-        setError(null);
-      });
-      socket.addEventListener("close", () => {
-        connectedRef.current = false;
-        setConnected(false);
-        if (!closed) {
-          reconnectTimer = window.setTimeout(connect, 1200);
-        }
-      });
-      socket.addEventListener("error", () => {
-        connectedRef.current = false;
-        setConnected(false);
-      });
-      socket.addEventListener("message", (message) => {
-        try {
-          const event = JSON.parse(String(message.data)) as BridgeEvent | BridgeStatusMessage;
-          const statusEvent = event as BridgeStatusMessage;
-          if (statusEvent.type === "status") {
-            serverVersionRef.current = statusEvent.status.sceneVersion;
-            setBridgeStatus(statusEvent.status);
-            setElementCount(statusEvent.status.elements);
-            return;
-          }
-          const sceneEvent = event as BridgeEvent;
-          setLastEvent(sceneEvent);
-          serverVersionRef.current = sceneEvent.sceneVersion;
-          applyScene(sceneEvent.scene, sceneEvent.sceneVersion);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      });
+    const markPointerDown = () => {
+      pointerDownRef.current = true;
     };
-
-    connect();
+    const markPointerUp = () => {
+      pointerDownRef.current = false;
+      scheduleSave();
+    };
+    window.addEventListener("pointerdown", markPointerDown, true);
+    window.addEventListener("pointerup", markPointerUp, true);
+    window.addEventListener("pointercancel", markPointerUp, true);
     return () => {
-      closed = true;
-      window.clearTimeout(reconnectTimer);
-      socket?.close();
-      if (socketRef.current === socket) {
-        socketRef.current = null;
-      }
+      window.removeEventListener("pointerdown", markPointerDown, true);
+      window.removeEventListener("pointerup", markPointerUp, true);
+      window.removeEventListener("pointercancel", markPointerUp, true);
     };
-  }, [applyScene]);
+  }, [scheduleSave]);
 
-  const statusText = useMemo(() => {
-    if (connected) return "live";
-    if (serverUp) return "polling";
-    return "offline";
-  }, [connected, serverUp]);
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (!pointerDownRef.current) {
+        saveCurrentScene();
+      }
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [saveCurrentScene]);
 
-  const aiReadText = useMemo(() => {
-    if (!bridgeStatus) return "unknown";
-    if (bridgeStatus.unreadUserChanges === 0) return `saw user #${bridgeStatus.lastAiReadUserSeq}`;
-    return `${bridgeStatus.unreadUserChanges} user changes`;
+  useEffect(() => {
+    const flushAutosave = () => {
+      const draft = readCurrentScene();
+      if (!draft) return;
+      const blob = new Blob([JSON.stringify({
+        elements: draft.elements,
+        appState: sanitizeAppState(draft.appState),
+        files: safeFiles(draft.files),
+        baseVersion: serverVersionRef.current,
+        force: true,
+      })], { type: "application/json" });
+      navigator.sendBeacon?.(`${HTTP_URL}/api/scene/sync`, blob);
+    };
+    window.addEventListener("pagehide", flushAutosave);
+    window.addEventListener("beforeunload", flushAutosave);
+    return () => {
+      window.removeEventListener("pagehide", flushAutosave);
+      window.removeEventListener("beforeunload", flushAutosave);
+    };
+  }, [readCurrentScene]);
+
+  const autosaveText = useMemo(() => {
+    if (autosaveState === "saving") return "Saving";
+    if (autosaveState === "error") return "Save error";
+    if (autosaveState === "offline") return "Offline";
+    return "Saved";
+  }, [autosaveState]);
+
+  const aiStatusText = useMemo(() => {
+    if (!bridgeStatus) return "AI status";
+    if (bridgeStatus.pendingAiApply > 0) return `${bridgeStatus.pendingAiApply} pending`;
+    if (bridgeStatus.unreadUserChanges > 0) return `${bridgeStatus.unreadUserChanges}`;
+    return "Ready";
   }, [bridgeStatus]);
 
-  const browserApplyText = useMemo(() => {
-    if (!bridgeStatus) return "unknown";
-    if (bridgeStatus.pendingAiApply === 0) return `applied v${bridgeStatus.browserAppliedVersion}`;
-    return `${bridgeStatus.pendingAiApply} AI pending`;
-  }, [bridgeStatus]);
+  const scenePath = bridgeStatus?.scenePath ?? DEFAULT_SCENE_PATH;
+  const sceneFileName = scenePath.split("/").at(-1) ?? scenePath;
 
   return (
     <main className="bridge-shell">
@@ -312,19 +341,16 @@ export default function App() {
         <Excalidraw
           excalidrawAPI={(api) => {
             excalidrawApiRef.current = api;
-            const pending = pendingSceneRef.current;
-            if (pending) {
+            if (pendingSceneRef.current) {
+              const scene = pendingSceneRef.current;
               pendingSceneRef.current = null;
-              window.setTimeout(() => {
-                applyScene(pending.scene, pending.sceneVersion);
-              }, 0);
+              window.setTimeout(() => applyScene(scene), 0);
             }
-          }}
-          onChange={(elements, appState, files) => {
-            syncBrowserScene(elements, appState, files);
           }}
           initialData={{
             appState: {
+              showWelcomeScreen: false,
+              viewModeEnabled: false,
               viewBackgroundColor: "#fbfbf7",
             },
           }}
@@ -340,86 +366,72 @@ export default function App() {
         </Excalidraw>
       </section>
 
-      {!hudOpen ? (
-        <button
-          className="hud-button"
-          type="button"
-          aria-label="Open AI Bridge status"
-          onClick={() => setHudOpen(true)}
-        >
-          <span className={`dot dot--${statusText}`} />
-          <span>AI</span>
-          <span className={`hud-button__read ${bridgeStatus?.unreadUserChanges ? "hud-button__read--unread" : ""}`}>
-            {bridgeStatus?.unreadUserChanges ? `${bridgeStatus.unreadUserChanges} user changes` : "seen"}
-          </span>
-        </button>
-      ) : null}
-
-      <aside className={`hud ${hudOpen ? "hud--open" : "hud--closed"}`} aria-label="Bridge status">
-        <div className="hud__header">
-          <span className={`dot dot--${statusText}`} />
-          <div>
-            <strong>AI Bridge</strong>
-            <span>{statusText}</span>
-          </div>
-          <button
-            className="hud__minimize"
-            type="button"
-            aria-label="Minimize AI Bridge status"
-            onClick={() => setHudOpen(false)}
-          >
-            -
-          </button>
+      <div className="bridge-overlays" aria-hidden={false}>
+        <div className={`save-chip save-chip--${autosaveState}`} title={bridgeStatus?.lastMutationAt ?? undefined}>
+          <span className="save-chip__dot" />
+          <span>{autosaveText}</span>
         </div>
-        <dl>
-          <div>
-            <dt>Canvas</dt>
-            <dd>{elementCount} elements</dd>
-          </div>
-          <div>
-            <dt>Version</dt>
-            <dd>v{bridgeStatus?.sceneVersion ?? serverVersionRef.current}</dd>
-          </div>
-          <div>
-            <dt>AI read</dt>
-            <dd>{aiReadText}</dd>
-          </div>
-          <div>
-            <dt>Last change</dt>
-            <dd title={bridgeStatus?.lastActivity?.summary}>
-              {bridgeStatus?.lastActivity ? `${bridgeStatus.lastActivity.actor}: ${bridgeStatus.lastActivity.summary}` : "none"}
-            </dd>
-          </div>
-          <div>
-            <dt>User changes</dt>
-            <dd>{bridgeStatus?.unreadUserChanges ?? 0} unread</dd>
-          </div>
-          <div>
-            <dt>Browser</dt>
-            <dd>{browserApplyText}</dd>
-          </div>
-          <div>
-            <dt>Last command</dt>
-            <dd>{bridgeStatus?.lastCommand ?? lastEvent?.command.type ?? "none"}</dd>
-          </div>
-          <div>
-            <dt>HTTP</dt>
-            <dd>127.0.0.1:5174</dd>
-          </div>
-          <div>
-            <dt>WebSocket</dt>
-            <dd>{connected ? "connected" : "waiting"}</dd>
-          </div>
-          <div>
-            <dt>Last sync</dt>
-            <dd>{lastSync}</dd>
-          </div>
-        </dl>
-        <button className="hud__sync" type="button" onClick={syncNow}>
-          Sync now
+
+        <button
+          className={`ai-status-chip ${aiPanelOpen ? "ai-status-chip--open" : ""}`}
+          type="button"
+          aria-expanded={aiPanelOpen}
+          aria-controls="ai-status-details"
+          title={bridgeStatus?.lastActivity?.summary ?? "AI Bridge status"}
+          onClick={() => setAiPanelOpen((open) => !open)}
+        >
+          <span className={`dot dot--${autosaveState === "offline" ? "offline" : bridgeStatus ? "live" : "polling"}`} />
+          <span>AI</span>
+          <strong aria-label="AI bridge status">{aiStatusText}</strong>
         </button>
-        {error ? <p className="error">{error}</p> : null}
-      </aside>
+
+        {aiPanelOpen ? (
+          <aside id="ai-status-details" className="ai-status-panel" aria-label="AI Bridge details">
+            <dl>
+              <div>
+                <dt>Elements</dt>
+                <dd>{bridgeStatus?.elements ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Version</dt>
+                <dd>v{bridgeStatus?.sceneVersion ?? serverVersionRef.current}</dd>
+              </div>
+              <div>
+                <dt>User changes</dt>
+                <dd>{bridgeStatus?.unreadUserChanges ?? 0}</dd>
+              </div>
+              <div>
+                <dt>AI pending</dt>
+                <dd>{bridgeStatus?.pendingAiApply ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Queue</dt>
+                <dd>{bridgeStatus?.pendingOps ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Command</dt>
+                <dd>{bridgeStatus?.lastCommand ?? "none"}</dd>
+              </div>
+              <div className="ai-status-panel__wide">
+                <dt>Last</dt>
+                <dd title={bridgeStatus?.lastActivity?.summary}>
+                  {bridgeStatus?.lastActivity ? `${bridgeStatus.lastActivity.actor}: ${bridgeStatus.lastActivity.summary}` : "none"}
+                </dd>
+              </div>
+            </dl>
+          </aside>
+        ) : null}
+
+        <button
+          className={`path-chip ${pathExpanded ? "path-chip--expanded" : ""}`}
+          type="button"
+          title={scenePath}
+          onClick={() => setPathExpanded((expanded) => !expanded)}
+        >
+          <span>Path</span>
+          <code>{pathExpanded ? scenePath : sceneFileName}</code>
+        </button>
+      </div>
     </main>
   );
 }
