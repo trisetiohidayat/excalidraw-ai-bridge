@@ -262,3 +262,125 @@ dd {
   font-size: 12px;
   line-height: 1.35;
 }
+
+.export-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.24);
+  pointer-events: auto;
+}
+
+.export-dialog {
+  width: min(520px, calc(100vw - 40px));
+  padding: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 10px;
+  color: #172033;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.24);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.export-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.export-dialog h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.export-dialog p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.export-dialog__close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  color: #475467;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.export-dialog__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.export-dialog__grid button,
+.export-dialog__footer button {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.export-dialog__grid button {
+  display: grid;
+  gap: 8px;
+  min-height: 124px;
+  padding: 14px;
+  text-align: left;
+}
+
+.export-dialog__grid button:hover,
+.export-dialog__footer button:hover,
+.export-dialog__close:hover {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.export-dialog__grid strong {
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.export-dialog__grid span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.export-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.export-dialog__footer button {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+@media (max-width: 620px) {
+  .export-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .export-dialog__grid button {
+    min-height: 86px;
+  }
+}
